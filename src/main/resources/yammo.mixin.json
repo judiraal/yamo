@@ -1,0 +1,12 @@
+{
+  "required": true,
+  "package": "com.judiraal.yammo.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "refmap": "yammo.mixin-refmap.json",
+  "mixins": [
+    "minecraft.DataFixersMixin",
+    "minecraft.StructureTemplateManagerMixin",
+    "minecraft.UtilMixin"
+  ],
+  "minVersion": "0.8"
+}
