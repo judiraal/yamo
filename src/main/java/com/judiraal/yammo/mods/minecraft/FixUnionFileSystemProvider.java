@@ -19,6 +19,7 @@ import java.io.IOException;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
+import java.lang.reflect.AccessibleObject;
 import java.lang.reflect.Field;
 import java.nio.channels.FileChannel;
 import java.nio.channels.SeekableByteChannel;
@@ -61,8 +62,7 @@ public class FixUnionFileSystemProvider {
             UNSAFE = (Unsafe) f.get(null);
 
             var lookupField = MethodHandles.Lookup.class.getDeclaredField("IMPL_LOOKUP");
-            UNSAFE.putBoolean(lookupField, 12, true);
-            MethodHandles.Lookup lookup = (MethodHandles.Lookup) lookupField.get(null);
+            var lookup = (MethodHandles.Lookup) UNSAFE.getObject(UNSAFE.staticFieldBase(lookupField), UNSAFE.staticFieldOffset(lookupField));
 
             BAC_CLASS = Class.forName("jdk.nio.zipfs.ByteArrayChannel");
             ZFS_CLASS = Class.forName("jdk.nio.zipfs.ZipFileSystem");
