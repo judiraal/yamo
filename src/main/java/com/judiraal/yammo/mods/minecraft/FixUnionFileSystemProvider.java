@@ -180,10 +180,12 @@ public class FixUnionFileSystemProvider {
             var ch = (SeekableByteChannel) H_ZIP_FILE_SYSTEM_CH.invoke(fs);
             if (ch.getClass() == BAC_CLASS) {
                 var buffer = (byte[]) H_BAC_BUFFER.invoke(ch);
-                Yammo.LOGGER.info("saved {}kb for {}", buffer.length / 1000, keyString);
                 String fileHash = Hashing.murmur3_128().hashBytes(buffer).toString();
                 var filePath = BASE_PATH.resolve(fileHash + ".jar");
-                if (!Files.exists(filePath)) Files.write(filePath, buffer);
+                if (!Files.exists(filePath)) {
+                    Yammo.LOGGER.debug("saved {}kb for {}", buffer.length / 1000, keyString);
+                    Files.write(filePath, buffer);
+                }
                 sbc = Files.newByteChannel(filePath, StandardOpenOption.READ);
                 if (sbc instanceof FileChannel) H_FILE_CHANNEL_IMPL_UNINTERRUPTIBLE.invoke(sbc);
                 H_ZIP_FILE_SYSTEM_SET_CH.invoke(fs, sbc);
