@@ -9,6 +9,7 @@ import com.mojang.datafixers.types.Type;
 import com.mojang.datafixers.types.templates.TypeTemplate;
 import com.mojang.serialization.Dynamic;
 import net.minecraft.SharedConstants;
+import net.minecraft.util.datafix.DataFixers;
 import net.neoforged.neoforge.common.util.Lazy;
 
 import java.util.HashMap;
@@ -41,18 +42,27 @@ public class LazyDataFixerBuilder {
         return builder.build();
     }
 
+    public static void forceDFU() {
+        if (DataFixers.getDataFixer() instanceof LazyDataFixer fixer) {
+            fixer.builder.replaceWithRealDFU(false);
+        }
+    }
+
     private class LazyDataFixer extends DataFixerUpper {
+        private final LazyDataFixerBuilder builder;
+
         Lazy<Schema> schema = Lazy.of(BasicSchema::new);
 
         protected LazyDataFixer() {
             super(null, null, null);
+            this.builder = LazyDataFixerBuilder.this;
         }
 
         @Override
         public <T> Dynamic<T> update(DSL.TypeReference type, Dynamic<T> input, int version, int newVersion) {
             if (version < newVersion) {
                 if (realDFU != null) return analyzeAndUpdate(type, input, version, newVersion);
-                replaceWithRealDFU();
+                replaceWithRealDFU(true);
                 if (realDFU != null) return analyzeAndUpdate(type, input, version, newVersion);
             }
             return input;
@@ -61,7 +71,7 @@ public class LazyDataFixerBuilder {
         private <T> Dynamic<T> analyzeAndUpdate(DSL.TypeReference type, Dynamic<T> input, int version, int newVersion) {
             Dynamic<T> update = realDFU.fixer().update(type, input, version, newVersion);
             if (input != update)
-                Yammo.LOGGER.debug("dfu.update {} from version {} to {}", type, version, newVersion);
+                Yammo.LOGGER.trace("dfu.update {} from version {} to {}", type, version, newVersion);
             return update;
         }
 
@@ -101,7 +111,7 @@ public class LazyDataFixerBuilder {
         }
     }
 
-    private synchronized void replaceWithRealDFU() {
+    private synchronized void replaceWithRealDFU(boolean logStackTrace) {
         if (realDFU == null) {
             try {
                 throw new RuntimeException("Deferred DFU initialization");

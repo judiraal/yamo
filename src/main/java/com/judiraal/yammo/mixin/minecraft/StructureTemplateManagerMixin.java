@@ -2,6 +2,7 @@ package com.judiraal.yammo.mixin.minecraft;
 
 import com.google.common.cache.CacheBuilder;
 import com.judiraal.yammo.Yammo;
+import com.judiraal.yammo.YammoConfig;
 import com.judiraal.yammo.mods.minecraft.StructureTemplateCache;
 import com.llamalad7.mixinextras.injector.ModifyExpressionValue;
 import com.mojang.datafixers.DataFixer;
@@ -35,12 +36,19 @@ public abstract class StructureTemplateManagerMixin implements StructureTemplate
 
     @Unique
     @Override
-    public void msc$cache(ResourceLocation id) {
+    public boolean msc$cache(ResourceLocation id) {
+        boolean stored = false;
         if (!cache.existsCached(id)) {
             var result = tryLoad(id);
-            if (result.isPresent() && cache.getLastVersion() != StructureTemplateCache.INITIAL_VERSION)
+            if (result.isPresent() && cache.getLastVersion() != StructureTemplateCache.INITIAL_VERSION) {
                 cache.storeCached(id, result.get());
+                stored = true;
+            }
+            try {
+                Thread.sleep(20);
+            } catch (Exception ignored) {}
         }
+        return stored;
     }
 
     @Inject(method = "<init>", at = @At("RETURN"))
@@ -57,11 +65,12 @@ public abstract class StructureTemplateManagerMixin implements StructureTemplate
 
     @Unique
     private Map<ResourceLocation, Optional<StructureTemplate>> msc$cachingRepository() {
-        return CacheBuilder.newBuilder().expireAfterAccess(1, TimeUnit.MINUTES).<ResourceLocation, Optional<StructureTemplate>>build().asMap();
+        return CacheBuilder.newBuilder().expireAfterAccess(10, TimeUnit.SECONDS).<ResourceLocation, Optional<StructureTemplate>>build().asMap();
     }
 
     @ModifyArg(method = {"get"}, at = @At(value = "INVOKE", target = "java/util/Map.computeIfAbsent (Ljava/lang/Object;Ljava/util/function/Function;)Ljava/lang/Object;"), index = 1)
     private Function<ResourceLocation, Optional<StructureTemplate>> msc$load(Function<ResourceLocation, Optional<StructureTemplate>> mappingFunction) {
+        if (!YammoConfig.autoStructureUpgrade.get() || !YammoConfig.lazyDFU.get()) return mappingFunction;
         return r -> {
             var result = cache.tryCachedLoad(r);
             if (result.isPresent()) return result;
