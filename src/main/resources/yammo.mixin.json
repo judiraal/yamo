@@ -4,9 +4,14 @@
   "compatibilityLevel": "JAVA_21",
   "refmap": "yammo.mixin-refmap.json",
   "mixins": [
+    "cold_sweat.BlockTempModifierAccessor",
+    "cold_sweat.WorldHelperAccessor",
+    "curios.CurioInventoryCapabilityMixin",
+    "irons_spellbooks.InvisibilityRingMixin",
     "minecraft.DataFixersMixin",
     "minecraft.StructureTemplateManagerMixin",
     "minecraft.UtilMixin"
   ],
-  "minVersion": "0.8"
+  "minVersion": "0.8",
+  "plugin": "com.judiraal.yammo.mods.ConditionalMixin"
 }

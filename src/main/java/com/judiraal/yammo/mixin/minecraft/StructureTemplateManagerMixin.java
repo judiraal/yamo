@@ -1,5 +1,6 @@
 package com.judiraal.yammo.mixin.minecraft;
 
+import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import com.judiraal.yammo.Yammo;
 import com.judiraal.yammo.YammoConfig;
@@ -44,9 +45,6 @@ public abstract class StructureTemplateManagerMixin implements StructureTemplate
                 cache.storeCached(id, result.get());
                 stored = true;
             }
-            try {
-                Thread.sleep(20);
-            } catch (Exception ignored) {}
         }
         return stored;
     }
@@ -65,7 +63,7 @@ public abstract class StructureTemplateManagerMixin implements StructureTemplate
 
     @Unique
     private Map<ResourceLocation, Optional<StructureTemplate>> msc$cachingRepository() {
-        return CacheBuilder.newBuilder().expireAfterAccess(10, TimeUnit.SECONDS).<ResourceLocation, Optional<StructureTemplate>>build().asMap();
+        return (cache.structureCache = CacheBuilder.newBuilder().expireAfterAccess(10, TimeUnit.SECONDS).<ResourceLocation, Optional<StructureTemplate>>build()).asMap();
     }
 
     @ModifyArg(method = {"get"}, at = @At(value = "INVOKE", target = "java/util/Map.computeIfAbsent (Ljava/lang/Object;Ljava/util/function/Function;)Ljava/lang/Object;"), index = 1)

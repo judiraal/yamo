@@ -1,5 +1,6 @@
 package com.judiraal.yammo;
 
+import com.judiraal.yammo.mods.ConditionalSubscribers;
 import com.mojang.logging.LogUtils;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
@@ -13,6 +14,7 @@ public class Yammo {
     public static final String MOD_ID = "yammo";
 
     public Yammo(IEventBus modEventBus, ModContainer modContainer) {
+        ConditionalSubscribers.inject(modContainer);
         modContainer.registerConfig(ModConfig.Type.COMMON, YammoConfig.SPEC);
     }
 }

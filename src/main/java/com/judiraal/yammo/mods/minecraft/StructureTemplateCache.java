@@ -1,5 +1,6 @@
 package com.judiraal.yammo.mods.minecraft;
 
+import com.google.common.cache.Cache;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.judiraal.yammo.Yammo;
 import com.judiraal.yammo.YammoConfig;
@@ -17,7 +18,10 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplateManager;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.fml.loading.FMLPaths;
+import net.neoforged.neoforge.event.tick.ServerTickEvent;
 import net.neoforged.neoforge.server.ServerLifecycleHooks;
 
 import java.io.FileInputStream;
@@ -26,24 +30,29 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
+@EventBusSubscriber
 public class StructureTemplateCache {
     private static final Path BASE_PATH = FMLPaths.getOrCreateGameRelativePath(Path.of("cache", "structures"));
     public static final Integer INITIAL_VERSION = SharedConstants.getCurrentVersion().getDataVersion().getVersion();
+    private static StructureTemplateCache INSTANCE;
 
     private final StructureTemplateManager manager;
     private final ThreadLocal<Integer> lastVersion = ThreadLocal.withInitial(() -> INITIAL_VERSION);
 
     private enum ScanStatus {WAITING, RUNNING, DONE}
     private ScanStatus scanStatus = ScanStatus.WAITING;
+    public Cache<ResourceLocation, Optional<StructureTemplate>> structureCache;
 
     public StructureTemplateCache(StructureTemplateManager manager) {
         this.manager = manager;
+        INSTANCE = this;
     }
 
     private Path resourceToPath(ResourceLocation resourceLocation) {
@@ -76,7 +85,6 @@ public class StructureTemplateCache {
     public boolean storeCached(ResourceLocation resourceLocation, StructureTemplate structureTemplate) {
         try {
             if (scanStatus == ScanStatus.WAITING) runScan();
-            //Yammo.LOGGER.debug("storing cached structure {}", resourceLocation);
             Path path = resourceToPath(resourceLocation);
             Files.createDirectories(path.getParent());
             CompoundTag compoundtag = structureTemplate.save(new CompoundTag());
@@ -98,7 +106,45 @@ public class StructureTemplateCache {
             target.sendSystemMessage(Component.literal(message));
     }
 
-    public void runScan() {
+    private Stats stats;
+
+    @SubscribeEvent
+    public static void runScanOnServer(ServerTickEvent.Post event) {
+        if (INSTANCE.structureCache != null && (event.getServer().getTickCount() & 127) == 0) INSTANCE.structureCache.cleanUp();
+        if (INSTANCE.scanStatus == ScanStatus.RUNNING && !YammoConfig.asyncStructureUpgrade.get() && (event.getServer().getTickCount() & 1) == 0) {
+            if (INSTANCE.stats != null) INSTANCE.stats.update(TimeUnit.NANOSECONDS.toMillis(event.getServer().getAverageTickTimeNanos()));
+            INSTANCE.runScanSync(event);
+        }
+    }
+
+    private void runScan() {
+        if (YammoConfig.asyncStructureUpgrade.get()) {
+            runScanAsync();
+        } else {
+            stats = new Stats();
+            stats.locations = manager.listTemplates().toList();
+            stats.total = stats.locations.size();
+            scanStatus = ScanStatus.RUNNING;
+        }
+    }
+
+    private void runScanSync(ServerTickEvent.Post event) {
+        if (event.getServer().getTickCount() < 300) return;
+        if (stats.count == 0) sendSystemMessage(String.format("YAMO: Starting synchronous background structure scan of %s structures...", stats.total));
+        for (var location: stats.locations.subList(stats.count, Math.min(stats.total, stats.count + stats.currentStructureCount))) try {
+            scanLocation(location, stats);
+            if (Runtime.getRuntime().freeMemory() * 100 / Runtime.getRuntime().maxMemory() < 20) return;
+            if (!event.hasTime()) break;
+        } catch (Exception e) {
+            Yammo.LOGGER.warn("unable to process structure '{}'", location, e);
+        }
+        if (stats.count >= stats.total) {
+            sendSystemMessage("YAMO: Background structure scan complete");
+            scanStatus = ScanStatus.DONE;
+        }
+    }
+
+    public void runScanAsync() {
         if (scanStatus != ScanStatus.WAITING) return;
         synchronized (this) {
             if (scanStatus != ScanStatus.WAITING) return;
@@ -113,9 +159,12 @@ public class StructureTemplateCache {
             } catch (Exception ignored) {}
             var locations = manager.listTemplates().toList();
             stats.total = locations.size();
-            sendSystemMessage(String.format("YAMO: Starting background structure scan of %s structures...", stats.total));
+            sendSystemMessage(String.format("YAMO: Starting async background structure scan of %s structures...", stats.total));
             for (var location: locations) try {
-                scanLocation(location, stats);
+                if (scanLocation(location, stats))
+                    try {
+                        Thread.sleep(20);
+                    } catch (Exception ignored) {}
             } catch (Exception e) {
                 Yammo.LOGGER.warn("unable to process structure '{}'", location, e);
             }
@@ -125,7 +174,7 @@ public class StructureTemplateCache {
         });
     }
 
-    private void scanLocation(ResourceLocation location, Stats stats) {
+    private boolean scanLocation(ResourceLocation location, Stats stats) {
         MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
         if (server == null) {
             stats.messageTickCount = 0;
@@ -134,15 +183,25 @@ public class StructureTemplateCache {
             sendSystemMessage(String.format("YAMO: Currently scanned %s structures and updated %s, %s%% done",
                     stats.count, stats.saved, (int)((float)stats.count / stats.total * 100)));
         }
-        if (((LoaderAccess) manager).msc$cache(location)) stats.saved++;
+        boolean result = ((LoaderAccess) manager).msc$cache(location);
+        if (result) stats.saved++;
         stats.count++;
+        return result;
     }
 
     private static class Stats {
-        long count;
-        long saved;
-        long total;
+        int count;
+        int saved;
+        int total;
         int messageTickCount;
+        int currentStructureCount = 1;
+        List<ResourceLocation> locations;
+
+        public void update(long millis) {
+            if (millis < 30) currentStructureCount++;
+            if (millis > 60) currentStructureCount--;
+            if (currentStructureCount < 1) currentStructureCount = 1;
+        }
     }
 
     public int getLastVersion() {

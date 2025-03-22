@@ -78,6 +78,10 @@ configurations {
 
 dependencies {
     implementation "net.neoforged:neoforge:${neo_version}"
+
+    compileOnly "curse.maven:irons-spells-n-spellbooks-855414:6312581"
+    compileOnly "curse.maven:curios-309927:6296219"
+    compileOnly "curse.maven:cold-sweat-506194:6176789"
 }
 
 tasks.withType(ProcessResources).configureEach {
