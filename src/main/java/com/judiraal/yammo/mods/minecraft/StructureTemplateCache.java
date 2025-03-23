@@ -20,6 +20,7 @@ import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemp
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplateManager;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.fml.loading.FMLEnvironment;
 import net.neoforged.fml.loading.FMLPaths;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
 import net.neoforged.neoforge.server.ServerLifecycleHooks;
@@ -34,8 +35,6 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.stream.Collectors;
 
 @EventBusSubscriber
 public class StructureTemplateCache {
@@ -100,10 +99,18 @@ public class StructureTemplateCache {
 
     private void sendSystemMessage(String message) {
         CommandSource target = ServerLifecycleHooks.getCurrentServer();
-        if (YammoConfig.displayStructureUpgradeMessage.get() && target instanceof IntegratedServer server)
-            target = LocalPlayerAccess.getLocalPlayerUUID().<CommandSource>map(server.getPlayerList()::getPlayer).orElse(target);
+        if (YammoConfig.displayStructureUpgradeMessage.get() && FMLEnvironment.dist.isClient())
+            target = ClientOnly.tryUpgradeTarget(target);
         if (target != null)
             target.sendSystemMessage(Component.literal(message));
+    }
+
+    private static class ClientOnly {
+        public static CommandSource tryUpgradeTarget(CommandSource target) {
+            if (target instanceof IntegratedServer server)
+                return LocalPlayerAccess.getLocalPlayerUUID().<CommandSource>map(server.getPlayerList()::getPlayer).orElse(target);
+            return target;
+        }
     }
 
     private Stats stats;

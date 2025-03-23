@@ -7,10 +7,12 @@
     "cold_sweat.BlockTempModifierAccessor",
     "cold_sweat.WorldHelperAccessor",
     "curios.CurioInventoryCapabilityMixin",
-    "irons_spellbooks.InvisibilityRingMixin",
     "minecraft.DataFixersMixin",
     "minecraft.StructureTemplateManagerMixin",
     "minecraft.UtilMixin"
+  ],
+  "client": [
+    "irons_spellbooks.InvisibilityRingMixin"
   ],
   "minVersion": "0.8",
   "plugin": "com.judiraal.yammo.mods.ConditionalMixin"
